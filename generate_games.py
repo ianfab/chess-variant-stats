@@ -44,7 +44,10 @@ def generate_fens(engine, variant, book, **limits):
             if len(fens) >= 2 and get_pieces(fens[-2]) != get_pieces(fens[-1]):
                 last_change = len(move_stack)
             hmvc.append(len(move_stack) - last_change)
-        pov_score = sf.game_result(variant, start_fen, move_stack)
+        if not sf.legal_moves(variant, start_fen, move_stack):
+            pov_score = sf.game_result(variant, start_fen, move_stack)
+        else:
+            _, pov_score = sf.is_optional_game_end(variant, start_fen, move_stack)
         color = sf.get_fen(variant, start_fen, move_stack).split(' ')[1]
         white_score = pov_score if color == 'w' else -pov_score
         result = '1-0' if white_score > 0 else '0-1' if white_score < 0 else '1/2-1/2'
