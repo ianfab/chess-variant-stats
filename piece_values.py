@@ -19,7 +19,7 @@ def line_count(filename):
 SCORE = {'1-0': 1, '0-1': 0, '1/2-1/2': 0.5}
 
 
-def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, raw_scale, elo_scale):
+def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, raw_scale, elo_scale, natural_scale):
     # Before the first line has been read, filename() returns None.
     if instream.filename() is None:
         filename = instream._files[0]
@@ -56,7 +56,14 @@ def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, ra
     model.fit(piece_diffs, results)
 
     # print fitted piece values
-    norm = 1 if raw_scale else log(10) / 400 if elo_scale else min(abs(v) for v in model.coef_[0] if abs(v) > 0.1)
+    if raw_scale:
+        norm = 1
+    elif natural_scale:
+        norm = log(10) / 2
+    elif elo_scale:
+        norm = log(10) / 400
+    else:
+        norm = min(abs(v) for v in model.coef_[0] if abs(v) > 0.1)
     for p, v in sorted(zip(piece_diffs.columns, model.coef_[0]), key=lambda x: x[1], reverse=True):
         print(p, '{:.2f}'.format(v / norm))
     print("white" if keep_color else "move", '{:.2f}'.format(model.intercept_[0] / norm))
@@ -71,7 +78,9 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--ignore-promotion', action='store_true', help='ignore promoted state of pieces')
     parser.add_argument('-r', '--raw-scale', action='store_true', help='don\'t normalize')
     parser.add_argument('-e', '--elo-scale', action='store_true', help='scale to Elo equivalents')
+    parser.add_argument('-n', '--natural-scale', action='store_true', help='use natural scale. 200 Elo = 1.')
     args = parser.parse_args()
 
     with fileinput.input(args.epd_files) as instream:
-        piece_values(instream, args.variant, args.stable_ply, args.keep_color, args.ignore_promotion, args.raw_scale, args.elo_scale)
+        piece_values(instream, args.variant, args.stable_ply, args.keep_color, args.ignore_promotion,
+                     args.raw_scale, args.elo_scale, args.natural_scale)
