@@ -14,7 +14,7 @@ def line_count(filename):
     return sum(buf.count(b'\n') for buf in bufgen)
 
 
-WDL = {'1-0': 0, '0-1': 1, '1/2-1/2': 2}
+WLD = {'1-0': 0, '0-1': 1, '1/2-1/2': 2}
 
 
 def swap_colors(pieces):
@@ -37,7 +37,7 @@ def get_entropy(wld):
 
 
 def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
-                      min_entropy, min_frequency, min_relevance):
+                      min_entropy, min_frequency, min_relevance, order_by):
     # Before the first line has been read, filename() returns None.
     if instream.filename() is None:
         filename = instream._files[0]
@@ -48,6 +48,7 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
 
     endgames = defaultdict(int)
     results = defaultdict(lambda: [0, 0, 0])
+    piece_score = defaultdict(lambda: [0, 0, 0])
     for epd in tqdm(instream, total=total):
         tokens = epd.strip().split(';')
         fen = tokens[0]
@@ -67,7 +68,20 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
         if len(pieces) <= max_pieces and int(annotations.get('hmvc', 0)) >= stable_ply:
             endgames[pieces] += 1
             if result:
-                results[pieces][WDL[result]] += 1
+                results[pieces][WLD[result]] += 1
+                # record piece WLD stats
+                diffs = {p: pieces.count(p.upper()) - pieces.count(p.lower()) for p in set(p.lower() for p in pieces)}
+                for p, v in diffs.items():
+                    if v < 0 and result in ('1-0', '0-1'):
+                        pov_result = '1-0' if result == '0-1' else '0-1'
+                    else:
+                        pov_result = result
+                    piece_score[p][WLD[pov_result]] += abs(v) / (1 + sum(abs(d) for d in diffs.values()) ** 10)
+    # Determine order of pieces
+    def piece_order(piece):
+        return piece_score[piece.lower()][1] / max(sum(piece_score[piece.lower()]), 1) - piece[-1].isupper()
+    print('Pieces sorted by strength')
+    print(' > '.join(sorted(piece_score, key=piece_order)).upper())
     # Report sorted by various criteria
     sorters = {
         'material': lambda ec: len(ec[0]),
@@ -76,14 +90,16 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
         'relevance': lambda ec: get_entropy(results[ec[0]]) * ec[1],
     }
     for name, sorter in sorters.items():
-        print('\nSorted by {}'.format(name))
-        print('Pieces\tFreq.\tWin\tLoss\tDraw')
-        for endgame, count in sorted(endgames.items(), key=sorter, reverse=True):
-            if (    count / total >= min_frequency
-                    and get_entropy(results[endgame]) >= min_entropy
-                    and get_entropy(results[endgame]) * count / total >= min_relevance):
-                score = ['{:.2%}'.format(i / max(sum(results[endgame]), 1)) for i in results[endgame]]
-                print('\t'.join((''.join(endgame), '{:.2%}'.format(count / total), *score)))
+        if order_by in ('all', name):
+            print('\nSorted by {}'.format(name))
+            print('Pieces\tFreq.\tWin\tLoss\tDraw')
+            for endgame, count in sorted(endgames.items(), key=sorter, reverse=True):
+                if (    count / total >= min_frequency
+                        and get_entropy(results[endgame]) >= min_entropy
+                        and get_entropy(results[endgame]) * count / total >= min_relevance):
+                    score = ['{:.2%}'.format(i / max(sum(results[endgame]), 1)) for i in results[endgame]]
+                    sorted_endgame = ''.join(sorted(endgame, key=piece_order))
+                    print('\t'.join((sorted_endgame, '{:.2%}'.format(count / total), *score)))
 
 
 if __name__ == '__main__':
@@ -96,8 +112,10 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--min-entropy', type=float, default=-1, help='filter trivial endgames based on entropy')
     parser.add_argument('-f', '--min-frequency', type=float, default=0, help='filter based on frequency')
     parser.add_argument('-r', '--min-relevance', type=float, default=-1, help='filter based on relevance')
+    parser.add_argument('-o', '--order-by', type=str, choices=('material', 'frequency', 'entropy', 'relevance', 'all'),
+                        default='relevance', help='sort by %(choices)s (default: %(default)s)')
     args = parser.parse_args()
 
     with fileinput.input(args.epd_files) as instream:
         evaluate_endgames(instream, args.variant, args.max_pieces, args.stable_ply, args.keep_color,
-                          args.min_entropy, args.min_frequency, args.min_relevance)
+                          args.min_entropy, args.min_frequency, args.min_relevance, args.order_by)
