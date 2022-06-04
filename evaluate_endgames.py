@@ -37,7 +37,7 @@ def get_entropy(wld):
 
 
 def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
-                      min_entropy, min_frequency, min_relevance, order_by):
+                      min_entropy, min_frequency, min_relevance, order_by, ignore_promotion):
     # Before the first line has been read, filename() returns None.
     if instream.filename() is None:
         filename = instream._files[0]
@@ -57,7 +57,7 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
         if not current_variant:
             raise Exception('Variant neither provided in EPD nor as argument')
         board = fen.split(' ')[0]
-        pieces = re.findall(r'(?:\+)?[A-Za-z]', board)
+        pieces = re.findall(r'[A-Za-z]' if ignore_promotion else r'(?:\+)?[A-Za-z]', board)
         result = annotations.get('result')
         # swap piece and result color
         if not keep_color and swap_colors(pieces):
@@ -91,7 +91,7 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
     }
     for name, sorter in sorters.items():
         if order_by in ('all', name):
-            print('\nSorted by {}'.format(name))
+            print('\nEndgames sorted by {}'.format(name))
             print('Pieces\tFreq.\tWin\tLoss\tDraw')
             for endgame, count in sorted(endgames.items(), key=sorter, reverse=True):
                 if (    count / total >= min_frequency
@@ -109,6 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--max-pieces', type=int, default=4, help='maximum number of pieces in endgame')
     parser.add_argument('-s', '--stable-ply', type=int, default=0, help='minimum ply since last material change')
     parser.add_argument('-c', '--keep-color', action='store_true', help='report color-specific statistics')
+    parser.add_argument('-p', '--ignore-promotion', action='store_true', help='ignore promoted state of pieces')
     parser.add_argument('-e', '--min-entropy', type=float, default=-1, help='filter trivial endgames based on entropy')
     parser.add_argument('-f', '--min-frequency', type=float, default=0, help='filter based on frequency')
     parser.add_argument('-r', '--min-relevance', type=float, default=-1, help='filter based on relevance')
@@ -118,4 +119,4 @@ if __name__ == '__main__':
 
     with fileinput.input(args.epd_files) as instream:
         evaluate_endgames(instream, args.variant, args.max_pieces, args.stable_ply, args.keep_color,
-                          args.min_entropy, args.min_frequency, args.min_relevance, args.order_by)
+                          args.min_entropy, args.min_frequency, args.min_relevance, args.order_by, args.ignore_promotion)
