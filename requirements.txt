@@ -1,2 +1,4 @@
 pyffish
 tqdm
+pandas
+sklearn

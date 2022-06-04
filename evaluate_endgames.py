@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('epd_files', nargs='*')
     parser.add_argument('-v', '--variant', help='only required if not annotated in input FEN/EPD')
     parser.add_argument('-m', '--max-pieces', type=int, default=4, help='maximum number of pieces in endgame')
-    parser.add_argument('-s', '--stable-ply', type=int, default=0, help='minimum ply since last material change')
+    parser.add_argument('-s', '--stable-ply', type=int, default=1, help='minimum ply since last material change')
     parser.add_argument('-c', '--keep-color', action='store_true', help='report color-specific statistics')
     parser.add_argument('-p', '--ignore-promotion', action='store_true', help='ignore promoted state of pieces')
     parser.add_argument('-e', '--min-entropy', type=float, default=-1, help='filter trivial endgames based on entropy')
