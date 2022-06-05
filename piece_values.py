@@ -19,7 +19,7 @@ def line_count(filename):
 SCORE = {'1-0': 1, '0-1': 0, '1/2-1/2': 0.5}
 
 
-def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, normalization, rescale):
+def piece_values(instream, stable_ply, keep_color, ignore_promotion, normalization, rescale):
     # Before the first line has been read, filename() returns None.
     if instream.filename() is None:
         filename = instream._files[0]
@@ -69,7 +69,6 @@ def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, no
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('epd_files', nargs='*')
-    parser.add_argument('-v', '--variant', help='only required if not annotated in input FEN/EPD')
     parser.add_argument('-s', '--stable-ply', type=int, default=1, help='minimum ply since last material change')
     parser.add_argument('-c', '--keep-color', action='store_true', help='report color-specific statistics')
     parser.add_argument('-p', '--ignore-promotion', action='store_true', help='ignore promoted state of pieces')
@@ -80,5 +79,5 @@ if __name__ == '__main__':
         parser.error('Rescaling only supported for "auto" normalization.')
 
     with fileinput.input(args.epd_files) as instream:
-        piece_values(instream, args.variant, args.stable_ply, args.keep_color, args.ignore_promotion,
+        piece_values(instream, args.stable_ply, args.keep_color, args.ignore_promotion,
                      args.normalization, args.rescale)
