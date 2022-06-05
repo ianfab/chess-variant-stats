@@ -35,9 +35,6 @@ def piece_values(instream, variant, stable_ply, keep_color, ignore_promotion, ra
         tokens = epd.strip().split(';')
         fen = tokens[0]
         annotations = dict(token.split(' ', 1) for token in tokens[1:])
-        current_variant = annotations.get('variant', variant)
-        if not current_variant:
-            raise Exception('Variant neither provided in EPD nor as argument')
         board = fen.split(' ')[0]
         pieces = re.findall(r'[A-Za-z]' if ignore_promotion else r'(?:\+)?[A-Za-z]', board)
         result = annotations.get('result')
