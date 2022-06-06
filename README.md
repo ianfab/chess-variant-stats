@@ -24,3 +24,5 @@ python3 piece_values.py test.epd
 python3 evaluate_endgames.py test.epd --max-pieces 4
 ```
 Run the scripts with `-h` to get help on the supported parameters.
+
+For reliable results you usually need to generate at least 100k positions, or more depending on the number of pieces, imbalances, and game phases. As starting positions for the data generation (`--book`) you can either use [pregenerated opening books](https://github.com/ianfab/books) or use the [book generator](https://github.com/ianfab/bookgen) yourself.
