@@ -40,11 +40,11 @@ def evaluate_endgames(instream, variant, max_pieces, stable_ply, keep_color,
                       min_entropy, min_frequency, min_relevance, order_by, ignore_promotion):
     # Before the first line has been read, filename() returns None.
     if instream.filename() is None:
-        filename = instream._files[0]
+        filenames = instream._files
     else:
-        filename = instream.filename()
+        filenames = [instream.filename()]
     # When reading from sys.stdin, filename() is "-"
-    total = None if (filename == "-") else line_count(filename)
+    total = None if filenames[0] == "-" else sum(line_count(filename) for filename in filenames)
 
     endgames = defaultdict(int)
     results = defaultdict(lambda: [0, 0, 0])
