@@ -3,9 +3,10 @@ import os
 import random
 import re
 import sys
+from uuid import uuid4
 
-from tqdm import tqdm
 import pyffish as sf
+from tqdm import tqdm
 
 import uci
 
@@ -51,15 +52,16 @@ def generate_fens(engine, variant, book, **limits):
         color = sf.get_fen(variant, start_fen, move_stack).split(' ')[1]
         white_score = pov_score if color == 'w' else -pov_score
         result = '1-0' if white_score > 0 else '0-1' if white_score < 0 else '1/2-1/2'
-        for fen, halfmove in zip(fens, hmvc):
-            yield '{};result {};hmvc {}'.format(fen, result, halfmove)
+        game_uuid = uuid4()
+        for fen, move, halfmove in zip(fens, move_stack[1:] + ['none'], hmvc):
+            yield '{};variant {};bm {};hmvc {};result {};game {}'.format(fen, variant, move, halfmove, result, game_uuid)
 
 
 def write_fens(stream, engine, variant, count, book, **limits):
     generator = generate_fens(engine, variant, book, **limits)
     for _ in tqdm(range(count)):
-        fen = next(generator)
-        stream.write('{};variant {}'.format(fen, variant) + os.linesep)
+        epd = next(generator)
+        stream.write(epd + os.linesep)
 
 
 if __name__ == '__main__':

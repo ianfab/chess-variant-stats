@@ -1,18 +1,13 @@
 import argparse
 import fileinput
-from functools import partial
 from math import log
 import re
 
-from tqdm import tqdm
 import pandas
 from sklearn.linear_model import LogisticRegression
+from tqdm import tqdm
 
-
-def line_count(filename):
-    f = open(filename, 'rb')
-    bufgen = iter(partial(f.raw.read, 1024*1024), b'')
-    return sum(buf.count(b'\n') for buf in bufgen)
+from common import sum_line_count, parse_epd
 
 
 SCORE = {'1-0': 1, '0-1': 0, '1/2-1/2': 0.5}
@@ -27,21 +22,13 @@ def game_phase(phases, max_pieces, num_board_pieces):
 
 
 def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, rescale, phases, max_pieces, imbalance):
-    # Before the first line has been read, filename() returns None.
-    if instream.filename() is None:
-        filenames = instream._files
-    else:
-        filenames = [instream.filename()]
-    # When reading from sys.stdin, filename() is "-"
-    total = None if filenames[0] == "-" else sum(line_count(filename) for filename in filenames)
+    total = sum_line_count(instream)
 
     # collect data
     diffs = [[] for _ in range(phases)]
     results = [[] for _ in range(phases)]
     for epd in tqdm(instream, total=total):
-        tokens = epd.strip().split(';')
-        fen = tokens[0]
-        annotations = dict(token.split(' ', 1) for token in tokens[1:])
+        fen, annotations = parse_epd(epd)
         board = fen.split(' ')[0]
         pieces = re.findall(r'[A-Za-z]' if unpromoted else r'(?:\+)?[A-Za-z]', board)
         num_board_pieces = len(re.findall(r'[A-Za-z]', board.split('[')[0]))
