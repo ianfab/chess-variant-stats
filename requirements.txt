@@ -1,4 +1,4 @@
 pyffish
 tqdm
 pandas
-sklearn
+scikit-learn
