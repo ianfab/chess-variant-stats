@@ -4,7 +4,7 @@ This project generates statistics for chess variants using [Fairy-Stockfish](htt
 
 ## Process
 Generating statistics consists of the following steps:
-1. `generate_games.py` to generate a set of positions in FEN/EPD format from playing engine games. This step can be skipped if positions are extracted from other sources such as databases of human games.
+1. `generate_games.py` to generate a set of positions in FEN/EPD format from playing engine games. Alternatively positions can be extracted from other sources such from PGNs with `pgn2epd.py`.
 2. `game_stats.py` to report basic game statistics, such as result distribution, game length, and branching factor.
 3. `piece_values.py` to fit piece values on the generated data using logistic regression.
 4. `evaluate_endgame.py` to identify endgames occuring in the generated positions and collect their result statistics, including insufficient and sufficient mating material.

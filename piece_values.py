@@ -30,6 +30,7 @@ def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, re
     for epd in tqdm(instream, total=total):
         fen, annotations = parse_epd(epd)
         board = fen.split(' ')[0]
+        hm = int(annotations.get('hmvc') or fen.split(' ')[-2])
         pieces = re.findall(r'[A-Za-z]' if unpromoted else r'(?:\+)?[A-Za-z]', board)
         num_board_pieces = len(re.findall(r'[A-Za-z]', board.split('[')[0]))
         if imbalance:
@@ -38,7 +39,7 @@ def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, re
                     if has_imbalance(pieces, colorImbalance):
                         pieces.append(colorImbalance)
         result = annotations.get('result')
-        if result in ('1-0', '0-1') and int(annotations.get('hmvc', 0)) >= stable_ply:
+        if result in ('1-0', '0-1') and hm >= stable_ply:
             black_pov = fen.split(' ')[1] == 'b' and not keep_color
             pov_result = ('1-0' if result == '0-1' else '0-1') if black_pov else result
             phase = game_phase(phases, max_pieces, num_board_pieces)
