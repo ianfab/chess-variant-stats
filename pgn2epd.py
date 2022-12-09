@@ -28,6 +28,7 @@ class PrintAllFensVisitor(chess.pgn.BaseVisitor):
         self.relevant = True
         self.game_result = ""
         self.game_uuid = uuid4()
+        self.hmvc = 0
 
     def visit_header(self, name, value):
         if name == "Variant":
@@ -43,13 +44,16 @@ class PrintAllFensVisitor(chess.pgn.BaseVisitor):
             # Optimization hint: Do not even bother parsing the moves.
             return chess.pgn.SKIP
 
+    def visit_move(self, board, move):
+        self.hmvc = 0 if board.is_capture(move) else self.hmvc + 1
+
     def visit_board(self, board):
         if self.relevant:
             # python-chess can't recognize 960 in non Chess960 games
             # but using it for non 960 games as well doesn't hurt
             board.chess960 = True
             self.fens.append(
-                "{};variant {};result {};game {}".format(board.fen(), self.uci_variant, self.game_result, self.game_uuid)
+                "{};variant {};hmvc {};result {};game {}".format(board.fen(), self.uci_variant, self.hmvc, self.game_result, self.game_uuid)
             )
 
     def begin_variation(self):

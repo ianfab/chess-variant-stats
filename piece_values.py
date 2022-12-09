@@ -21,16 +21,20 @@ def game_phase(phases, max_pieces, num_board_pieces):
     return phases - 1 - min(max(int(phases * (num_board_pieces - 1) / max_pieces), 0), phases - 1)
 
 
-def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, rescale, phases, max_pieces, imbalance):
+def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, rescale, phases, max_pieces,
+                 imbalance, equal_weighted, min_fullmove):
     total = sum_line_count(instream)
 
     # collect data
     diffs = [[] for _ in range(phases)]
     results = [[] for _ in range(phases)]
+    last_game = None
+    last_set = None
     for epd in tqdm(instream, total=total):
         fen, annotations = parse_epd(epd)
         board = fen.split(' ')[0]
         hm = int(annotations.get('hmvc') or fen.split(' ')[-2])
+        fm = int(annotations.get('fmvn') or fen.split(' ')[-1])
         pieces = re.findall(r'[A-Za-z]' if unpromoted else r'(?:\+)?[A-Za-z]', board)
         num_board_pieces = len(re.findall(r'[A-Za-z]', board.split('[')[0]))
         if imbalance:
@@ -39,13 +43,16 @@ def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, re
                     if has_imbalance(pieces, colorImbalance):
                         pieces.append(colorImbalance)
         result = annotations.get('result')
-        if result in ('1-0', '0-1') and hm >= stable_ply:
+        if result in ('1-0', '0-1') and hm >= stable_ply and fm >= min_fullmove:
             black_pov = fen.split(' ')[1] == 'b' and not keep_color
             pov_result = ('1-0' if result == '0-1' else '0-1') if black_pov else result
             phase = game_phase(phases, max_pieces, num_board_pieces)
             piece_set = set(min(p, p.swapcase()) for p in pieces)
-            diffs[phase].append({p: (pieces.count(p) - pieces.count(p.swapcase())) * (-1 if black_pov else 1) for p in piece_set})
-            results[phase].append(SCORE[pov_result])
+            if not equal_weighted or (annotations.get('game_uuid') != last_game or piece_set != last_set):
+                last_game = annotations.get('game_uuid')
+                last_set = piece_set
+                diffs[phase].append({p: (pieces.count(p) - pieces.count(p.swapcase())) * (-1 if black_pov else 1) for p in piece_set})
+                results[phase].append(SCORE[pov_result])
 
     for i in range(phases):
         print('\nPhase {} of {}'.format(i + 1, phases))
@@ -82,11 +89,14 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--normalization', choices=['off', 'elo', 'natural', 'auto'], default='auto', help='define normalization scale, one of %(choices)s')
     parser.add_argument('-r', '--rescale', type=float, default=1, help='rescale. only for "auto" normalization')
     parser.add_argument('-p', '--phases', type=int, default=1, help='number of game phases')
-    parser.add_argument('-m', '--max-pieces', type=int, default=32, help='maximum number of pieces, for game phases')
+    parser.add_argument('-m', '--max-pieces', type=int, default=32, help='maximum possible number of pieces, for game phases')
+    parser.add_argument('-e', '--equal-weighted', action='store_true', help='use each material configuration only once per game')
+    parser.add_argument('-f', '--min-fullmove', type=int, default=0, help='minimum fullmove count to consider position')
     args = parser.parse_args()
     if args.rescale != 1 and args.normalization != 'auto':
         parser.error('Rescaling only supported for "auto" normalization.')
 
     with fileinput.input(args.epd_files) as instream:
         piece_values(instream, args.stable_ply, args.keep_color, args.unpromoted,
-                     args.normalization, args.rescale, args.phases, args.max_pieces, args.imbalance)
+                     args.normalization, args.rescale, args.phases, args.max_pieces,
+                     args.imbalance, args.equal_weighted, args.min_fullmove)
