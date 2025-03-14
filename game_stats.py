@@ -1,5 +1,5 @@
 import argparse
-from collections import defaultdict
+from collections import defaultdict, Counter
 import fileinput
 
 import numpy as np
@@ -13,7 +13,9 @@ def game_stats(instream, variant, calculate_branching_factor):
     total = sum_line_count(instream)
     game_length = defaultdict(int)
     results = defaultdict(int)
+    piece_frequencies = Counter()
     branching_factor = []
+    mobility = []
     variants = sf.variants()
     for epd in tqdm(instream, total=total):
         fen, annotations = parse_epd(epd)
@@ -28,8 +30,25 @@ def game_stats(instream, variant, calculate_branching_factor):
             result = annotations.get('result')
             if result:
                 results[result] += 1
+
+        # Count occurrences of each piece type
+        board_state = fen.split()[0]
+        pieces = 0
+        stm_pieces = 0
+        for char in board_state:
+            if char.isalpha():
+                pieces += 1
+                piece_frequencies[char] += 1
+                if (fen.split()[1] == 'w') == char.isupper():
+                    stm_pieces += 1
+
         if calculate_branching_factor:
-            branching_factor.append(len(sf.legal_moves(current_variant, fen, [])))
+            bf = len(sf.legal_moves(current_variant, fen, []))
+            branching_factor.append(bf)
+            if stm_pieces:
+                mobility.append(bf / stm_pieces)
+
+
     def stats(v):
         return 'Median: {}\nMean: {:.1f}\nMax: {}'.format(np.median(v), np.mean(v), max(v)) if v else 'No data'
     print('\n# Results')
@@ -38,10 +57,20 @@ def game_stats(instream, variant, calculate_branching_factor):
             print('{}: {:.2%}'.format(result, count / sum(results.values())))
     else:
         print('No data')
+
     print('\n# Game length')
     print(stats(list(game_length.values())))
+
     print('\n# Branching factor')
     print(stats(branching_factor))
+
+    print('\n# Mobility per piece')
+    print(stats(mobility))
+
+    print('\n# Piece Frequency')
+    print(f'All: {sum(piece_frequencies.values()) / total}')
+    for piece, count in sorted(piece_frequencies.items(), key=lambda x: x[1], reverse=True):
+        print(f'{piece}: {count / total}')
 
 
 if __name__ == '__main__':
