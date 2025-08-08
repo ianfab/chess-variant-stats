@@ -48,6 +48,12 @@ def game_stats(instream, variant, calculate_branching_factor):
             if stm_pieces:
                 mobility.append(bf / stm_pieces)
 
+    # Calculate game tree complexity
+    game_tree_complexity = None
+    if branching_factor and game_length:
+        avg_branching_factor = np.mean(branching_factor)
+        avg_game_length = np.mean(list(game_length.values()))
+        game_tree_complexity = avg_branching_factor ** avg_game_length
 
     def stats(v):
         return 'Median: {}\nMean: {:.1f}\nMax: {}'.format(np.median(v), np.mean(v), max(v)) if v else 'No data'
@@ -66,6 +72,12 @@ def game_stats(instream, variant, calculate_branching_factor):
 
     print('\n# Mobility per piece')
     print(stats(mobility))
+
+    print('\n# Game tree complexity')
+    if game_tree_complexity is not None:
+        print('Estimated: {:.2e}'.format(game_tree_complexity))
+    else:
+        print('No data (requires branching factor calculation)')
 
     print('\n# Piece Frequency')
     print(f'All: {sum(piece_frequencies.values()) / total}')
