@@ -61,7 +61,7 @@ def write_fens(stream, engine, variant, count, book, **limits):
     generator = generate_fens(engine, variant, book, **limits)
     for _ in tqdm(range(count)):
         epd = next(generator)
-        stream.write(epd + os.linesep)
+        stream.write(epd + '\n')
 
 
 if __name__ == '__main__':
