@@ -3,14 +3,66 @@ import fileinput
 from math import log
 import re
 
+import numpy as np
 import pandas
 from sklearn.linear_model import LogisticRegression
+from sklearn.utils import resample
 from tqdm import tqdm
 
 from common import sum_line_count, parse_epd
 
 
 SCORE = {'1-0': 1, '0-1': 0, '1/2-1/2': 0.5}
+
+
+def estimate_uncertainty_bootstrap(piece_diffs, results, n_bootstrap=100, random_state=42):
+    """
+    Estimate uncertainty of logistic regression coefficients using bootstrap method.
+    
+    Args:
+        piece_diffs: DataFrame with piece difference features
+        results: List of game results (0, 0.5, 1)
+        n_bootstrap: Number of bootstrap samples
+        random_state: Random seed for reproducibility
+    
+    Returns:
+        (coefficients_mean, coefficients_std, intercept_mean, intercept_std)
+    """
+    if len(piece_diffs) < 10:  # Too few samples for meaningful uncertainty
+        return None, None, None, None
+    
+    np.random.seed(random_state)
+    
+    bootstrap_coefs = []
+    bootstrap_intercepts = []
+    
+    for _ in range(n_bootstrap):
+        # Bootstrap sample with replacement
+        X_boot, y_boot = resample(piece_diffs, results, random_state=np.random.randint(0, 10000))
+        
+        # Fit model on bootstrap sample
+        try:
+            model_boot = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
+            model_boot.fit(X_boot, y_boot)
+            bootstrap_coefs.append(model_boot.coef_[0])
+            bootstrap_intercepts.append(model_boot.intercept_[0])
+        except:
+            # Skip if fitting fails
+            continue
+    
+    if len(bootstrap_coefs) == 0:
+        return None, None, None, None
+    
+    # Calculate statistics across bootstrap samples
+    bootstrap_coefs = np.array(bootstrap_coefs)
+    bootstrap_intercepts = np.array(bootstrap_intercepts)
+    
+    coef_mean = np.mean(bootstrap_coefs, axis=0)
+    coef_std = np.std(bootstrap_coefs, axis=0)
+    intercept_mean = np.mean(bootstrap_intercepts)
+    intercept_std = np.std(bootstrap_intercepts)
+    
+    return coef_mean, coef_std, intercept_mean, intercept_std
 
 
 def has_imbalance(pieces, imbalance):
@@ -22,7 +74,7 @@ def game_phase(phases, max_pieces, num_board_pieces):
 
 
 def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, rescale, phases, max_pieces,
-                 imbalance, equal_weighted, min_fullmove):
+                 imbalance, equal_weighted, min_fullmove, n_bootstrap):
     total = sum_line_count(instream)
 
     # collect data
@@ -57,13 +109,25 @@ def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, re
     for i in range(phases):
         print('\nPhase {} of {}'.format(i + 1, phases))
 
+        if len(diffs[i]) == 0:
+            print("No data for this phase")
+            continue
+
         # convert to dataframe
         piece_diffs = pandas.DataFrame(diffs[i])
         piece_diffs.fillna(0, inplace=True)
 
+        if piece_diffs.shape[1] == 0:
+            print("No piece differences found")
+            continue
+
         # fit
         model = LogisticRegression(solver='liblinear', C=10.0, random_state=0)
         model.fit(piece_diffs, results[i])
+
+        # estimate uncertainty using bootstrap
+        coef_mean, coef_std, intercept_mean, intercept_std = estimate_uncertainty_bootstrap(
+            piece_diffs, results[i], n_bootstrap=n_bootstrap)
 
         # print fitted piece values
         if normalization == 'auto':
@@ -74,9 +138,35 @@ def piece_values(instream, stable_ply, keep_color, unpromoted, normalization, re
             norm = log(10) / 400
         else:
             norm = 1
-        for p, v in sorted(zip(piece_diffs.columns, model.coef_[0]), key=lambda x: x[1], reverse=True):
-            print(p, '{:.2f}'.format(v / norm))
-        print('white' if keep_color else 'move', '{:.2f}'.format(model.intercept_[0] / norm))
+        
+        # Print header
+        if coef_std is not None:
+            print(f"{'Piece':<8} {'Value':<8} {'StdErr':<8}")
+            print("-" * 24)
+        else:
+            print(f"{'Piece':<8} {'Value':<8}")
+            print("-" * 16)
+            
+        for j, (p, v) in enumerate(sorted(zip(piece_diffs.columns, model.coef_[0]), key=lambda x: x[1], reverse=True)):
+            if coef_std is not None:
+                std_err = coef_std[list(piece_diffs.columns).index(p)] / norm
+                print(f"{p:<8} {v / norm:>7.2f} {std_err:>7.2f}")
+            else:
+                print(f"{p:<8} {v / norm:>7.2f}")
+        
+        # Print intercept
+        move_label = 'white' if keep_color else 'move'
+        if intercept_std is not None:
+            intercept_std_norm = intercept_std / norm
+            print(f"{move_label:<8} {model.intercept_[0] / norm:>7.2f} {intercept_std_norm:>7.2f}")
+        else:
+            print(f"{move_label:<8} {model.intercept_[0] / norm:>7.2f}")
+            
+        # Print uncertainty information
+        if coef_std is not None:
+            print(f"\nUncertainty estimated using bootstrap method with {len(piece_diffs)} samples")
+        else:
+            print(f"\nInsufficient data ({len(piece_diffs)} samples) for uncertainty estimation")
 
 
 if __name__ == '__main__':
@@ -92,6 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--max-pieces', type=int, default=32, help='maximum possible number of pieces, for game phases')
     parser.add_argument('-e', '--equal-weighted', action='store_true', help='use each material configuration only once per game')
     parser.add_argument('-f', '--min-fullmove', type=int, default=0, help='minimum fullmove count to consider position')
+    parser.add_argument('--bootstrap-samples', type=int, default=100, help='number of bootstrap samples for uncertainty estimation')
     args = parser.parse_args()
     if args.rescale != 1 and args.normalization != 'auto':
         parser.error('Rescaling only supported for "auto" normalization.')
@@ -99,4 +190,4 @@ if __name__ == '__main__':
     with fileinput.input(args.epd_files) as instream:
         piece_values(instream, args.stable_ply, args.keep_color, args.unpromoted,
                      args.normalization, args.rescale, args.phases, args.max_pieces,
-                     args.imbalance, args.equal_weighted, args.min_fullmove)
+                     args.imbalance, args.equal_weighted, args.min_fullmove, args.bootstrap_samples)
