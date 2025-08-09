@@ -74,8 +74,10 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--depth', type=int, default=None, help='search depth')
     parser.add_argument('-t', '--movetime', type=int, default=None, help='search movetime (ms)')
     parser.add_argument('-b', '--book', type=str, default=None, help='EPD opening book')
+    parser.add_argument('-ef','--epdfile', type=str, default=None, help='Write generated games to EPD file.')
+    parser.add_argument('-ow','--overwrite', action='store_true', help='Overwrite the EPD file instead of appending.')
     args = parser.parse_args()
-
+    
     engine = uci.Engine([args.engine], dict(args.ucioptions))
     sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
     limits = dict()
@@ -85,4 +87,15 @@ if __name__ == '__main__':
         limits['movetime'] = args.movetime
     if not limits:
         parser.error('At least one of --depth and --movetime is required.')
-    write_fens(sys.stdout, engine, args.variant, args.count, args.book, **limits)
+    
+    if args.epdfile:
+        mode = 'w' if args.overwrite else 'a'
+        outstream = open(args.epdfile, mode, encoding='utf-8')
+    else:
+        outstream = sys.stdout
+    
+    try:
+        write_fens(outstream, engine, args.variant, args.count, args.book, **limits)
+    finally:
+        if args.epdfile:
+            outstream.close()
