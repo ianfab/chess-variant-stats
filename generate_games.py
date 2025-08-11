@@ -59,12 +59,7 @@ def generate_fens(engine, variant, book, **limits):
             yield '{};variant {};bm {};hmvc {};result {};game {}'.format(fen, variant, move, halfmove, result, game_uuid)
 
 
-def write_fens(stream, engine, variant, count, book, **limits):
-    """Original sequential write_fens function."""
-    generator = generate_fens(engine, variant, book, **limits)
-    for _ in tqdm(range(count)):
-        epd = next(generator)
-        stream.write(epd + '\n')
+
 
 
 def worker_generate_fens(args):
@@ -118,8 +113,8 @@ def worker_generate_fens(args):
                     pass  # Process might already be dead
 
 
-def write_fens_parallel(stream, engine_path, uci_options, variant, count, book, workers, **limits):
-    """Write FENs using multiple workers for parallel generation."""
+def write_fens(stream, engine_path, uci_options, variant, count, book, workers, **limits):
+    """Write FENs using workers for parallel generation."""
     # Distribute work among workers
     positions_per_worker = count // workers
     remaining_positions = count % workers
@@ -204,15 +199,9 @@ if __name__ == '__main__':
         outstream = sys.stdout
     
     try:
-        if args.workers <= 1:
-            # Sequential processing - create engine in main process
-            engine = uci.Engine([args.engine], dict(args.ucioptions))
-            sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
-            write_fens(outstream, engine, args.variant, args.count, args.book, **limits)
-        else:
-            # Parallel processing - engines will be created in worker processes
-            write_fens_parallel(outstream, args.engine, args.ucioptions, args.variant, 
-                               args.count, args.book, args.workers, **limits)
+        # Always use the unified multi-threading compatible approach
+        write_fens(outstream, args.engine, args.ucioptions, args.variant, 
+                   args.count, args.book, args.workers, **limits)
     finally:
         if args.epdfile:
             outstream.close()
