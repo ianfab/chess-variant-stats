@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 import os
 import random
 import re
@@ -58,9 +59,64 @@ def generate_fens(engine, variant, book, **limits):
 
 
 def write_fens(stream, engine, variant, count, book, **limits):
+    """Original sequential write_fens function."""
     generator = generate_fens(engine, variant, book, **limits)
     for _ in tqdm(range(count)):
         epd = next(generator)
+        stream.write(epd + '\n')
+
+
+def worker_generate_fens(args):
+    """Worker function for multiprocessing that generates a portion of FENs."""
+    engine_path, uci_options, variant, book, limits, count, worker_id = args
+    
+    # Create a new engine instance for this worker
+    engine = uci.Engine([engine_path], dict(uci_options) if uci_options else {})
+    sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
+    
+    # Set up random seed for this worker to ensure different games
+    random.seed(worker_id)
+    
+    results = []
+    generator = generate_fens(engine, variant, book, **limits)
+    
+    for _ in range(count):
+        try:
+            epd = next(generator)
+            results.append(epd)
+        except StopIteration:
+            break
+    
+    return results
+
+
+def write_fens_parallel(stream, engine_path, uci_options, variant, count, book, workers, **limits):
+    """Write FENs using multiple workers for parallel generation."""
+    # Distribute work among workers
+    positions_per_worker = count // workers
+    remaining_positions = count % workers
+    
+    # Prepare arguments for each worker
+    worker_args = []
+    for worker_id in range(workers):
+        worker_count = positions_per_worker + (1 if worker_id < remaining_positions else 0)
+        if worker_count > 0:
+            worker_args.append((
+                engine_path, uci_options, variant, book, limits, 
+                worker_count, worker_id
+            ))
+    
+    # Use multiprocessing to generate positions in parallel
+    with multiprocessing.Pool(processes=len(worker_args)) as pool:
+        # Show progress across all workers
+        with tqdm(total=count, desc="Generating positions") as pbar:
+            results = []
+            for result in pool.imap(worker_generate_fens, worker_args):
+                results.extend(result)
+                pbar.update(len(result))
+    
+    # Write all results to stream
+    for epd in results:
         stream.write(epd + '\n')
 
 
@@ -76,10 +132,12 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--book', type=str, default=None, help='EPD opening book')
     parser.add_argument('-ef','--epdfile', type=str, default=None, help='Write generated games to EPD file.')
     parser.add_argument('-ow','--overwrite', action='store_true', help='Overwrite the EPD file instead of appending.')
+    parser.add_argument('-w', '--workers', type=int, default=1, help='Number of parallel workers (default: 1)')
     args = parser.parse_args()
     
-    engine = uci.Engine([args.engine], dict(args.ucioptions))
-    sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
+    if args.workers < 1:
+        parser.error('Number of workers must be at least 1.')
+    
     limits = dict()
     if args.depth:
         limits['depth'] = args.depth
@@ -95,7 +153,15 @@ if __name__ == '__main__':
         outstream = sys.stdout
     
     try:
-        write_fens(outstream, engine, args.variant, args.count, args.book, **limits)
+        if args.workers <= 1:
+            # Sequential processing - create engine in main process
+            engine = uci.Engine([args.engine], dict(args.ucioptions))
+            sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
+            write_fens(outstream, engine, args.variant, args.count, args.book, **limits)
+        else:
+            # Parallel processing - engines will be created in worker processes
+            write_fens_parallel(outstream, args.engine, args.ucioptions, args.variant, 
+                               args.count, args.book, args.workers, **limits)
     finally:
         if args.epdfile:
             outstream.close()
