@@ -25,6 +25,14 @@ python3 game_stats.py --branching-factor test.epd
 python3 piece_values.py test.epd
 python3 evaluate_endgames.py --max-pieces=4 test.epd
 ```
+
+### Parallel Game Generation
+For faster generation of large datasets, you can use multiple workers to run engine instances in parallel:
+```
+python3 generate_games.py --engine fairy-stockfish.exe --variant chess --book chess.epd --movetime 10 --count 10000 --workers 4 > test.epd
+```
+The `--workers` parameter controls the number of parallel engine instances. Each worker generates a portion of the total positions independently, which can significantly speed up generation on multi-core systems.
+
 Run the scripts with `--help` to get help on the supported parameters.
 
 For reliable results you usually need to generate at least 100k positions, or more depending on the number of pieces, imbalances, and game phases. As starting positions for the data generation (`--book`) you can either use [pregenerated opening books](https://github.com/ianfab/books) or use the [book generator](https://github.com/ianfab/bookgen) yourself.

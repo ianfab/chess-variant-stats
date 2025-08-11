@@ -4,6 +4,7 @@ import os
 import random
 import re
 import sys
+import time
 from uuid import uuid4
 
 import pyffish as sf
@@ -70,24 +71,51 @@ def worker_generate_fens(args):
     """Worker function for multiprocessing that generates a portion of FENs."""
     engine_path, uci_options, variant, book, limits, count, worker_id = args
     
-    # Create a new engine instance for this worker
-    engine = uci.Engine([engine_path], dict(uci_options) if uci_options else {})
-    sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
-    
-    # Set up random seed for this worker to ensure different games
-    random.seed(worker_id)
-    
-    results = []
-    generator = generate_fens(engine, variant, book, **limits)
-    
-    for _ in range(count):
-        try:
-            epd = next(generator)
-            results.append(epd)
-        except StopIteration:
-            break
-    
-    return results
+    engine = None
+    try:
+        # Create a new engine instance for this worker
+        engine = uci.Engine([engine_path], dict(uci_options) if uci_options else {})
+        sf.set_option("VariantPath", engine.options.get("VariantPath", ""))
+        
+        # Set up random seed for this worker to ensure different games
+        # Combine worker_id with current time and process id for better randomness
+        import time
+        random.seed(hash((worker_id, time.time(), os.getpid())))
+        
+        results = []
+        generator = generate_fens(engine, variant, book, **limits)
+        
+        for _ in range(count):
+            try:
+                epd = next(generator)
+                results.append(epd)
+            except StopIteration:
+                # Generator exhausted, this shouldn't normally happen but is handled
+                break
+            except Exception as e:
+                # Log the error but continue with other positions
+                print(f"Warning: Worker {worker_id} failed to generate position: {e}", file=sys.stderr)
+                continue
+        
+        return results
+        
+    except Exception as e:
+        # Handle engine creation or other critical errors
+        error_msg = f"Worker {worker_id} failed: {e}"
+        print(error_msg, file=sys.stderr)
+        raise RuntimeError(error_msg)
+    finally:
+        # Clean up engine process if it was created
+        if engine and hasattr(engine, 'process') and engine.process:
+            try:
+                engine.process.terminate()
+                engine.process.wait(timeout=5)  # Wait up to 5 seconds
+            except Exception:
+                # Force kill if terminate doesn't work
+                try:
+                    engine.process.kill()
+                except Exception:
+                    pass  # Process might already be dead
 
 
 def write_fens_parallel(stream, engine_path, uci_options, variant, count, book, workers, **limits):
@@ -106,14 +134,37 @@ def write_fens_parallel(stream, engine_path, uci_options, variant, count, book, 
                 worker_count, worker_id
             ))
     
+    if not worker_args:
+        print("Warning: No work to distribute among workers", file=sys.stderr)
+        return
+    
     # Use multiprocessing to generate positions in parallel
-    with multiprocessing.Pool(processes=len(worker_args)) as pool:
-        # Show progress across all workers
-        with tqdm(total=count, desc="Generating positions") as pbar:
-            results = []
-            for result in pool.imap(worker_generate_fens, worker_args):
-                results.extend(result)
-                pbar.update(len(result))
+    results = []
+    completed_count = 0
+    failed_workers = 0
+    
+    try:
+        with multiprocessing.Pool(processes=len(worker_args)) as pool:
+            with tqdm(total=count, desc="Generating positions") as pbar:
+                # Use imap for better error handling and progress reporting
+                for i, result in enumerate(pool.imap(worker_generate_fens, worker_args)):
+                    if result:
+                        results.extend(result)
+                        completed_count += len(result)
+                        pbar.update(len(result))
+                    else:
+                        failed_workers += 1
+                        print(f"Warning: Worker {i} returned no results", file=sys.stderr)
+    
+    except Exception as e:
+        print(f"Error during parallel generation: {e}", file=sys.stderr)
+        if results:
+            print(f"Partial results available: {len(results)} positions generated", file=sys.stderr)
+        else:
+            raise
+    
+    if failed_workers > 0:
+        print(f"Warning: {failed_workers} workers failed. Generated {completed_count} out of {count} requested positions.", file=sys.stderr)
     
     # Write all results to stream
     for epd in results:
