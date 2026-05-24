@@ -20,7 +20,7 @@ pip3 install -r requirements.txt
 ## Usage
 A simple example of running the scripts is:
 ```
-python3 generate_games.py --engine fairy-stockfish.exe --variant chess --book chess.epd --movetime 10 --count 1000 > test.epd
+python3 generate_games.py --engine fairy-stockfish.exe --variant chess --book chess.epd --movetime 10 --count 1000 --epdfile test.epd
 python3 game_stats.py --branching-factor test.epd
 python3 piece_values.py test.epd
 python3 evaluate_endgames.py --max-pieces=4 test.epd
@@ -29,7 +29,7 @@ python3 evaluate_endgames.py --max-pieces=4 test.epd
 ### Parallel Game Generation
 For faster generation of large datasets, you can use multiple workers to run engine instances in parallel:
 ```
-python3 generate_games.py --engine fairy-stockfish.exe --variant chess --book chess.epd --movetime 10 --count 10000 --workers 4 > test.epd
+python3 generate_games.py --engine fairy-stockfish.exe --variant chess --book chess.epd --movetime 10 --count 10000 --workers 4 --epdfile test.epd
 ```
 The `--workers` parameter controls the number of parallel engine instances. Each worker generates a portion of the total positions independently, which can significantly speed up generation on multi-core systems.
 
